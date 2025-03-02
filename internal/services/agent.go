@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Reit437/Calculator-2.0/pkg/errors"
 	"github.com/joho/godotenv"
 )
 
@@ -48,6 +49,9 @@ var (
 // Функция Agent будет выполняться в отдельной горутине
 func Agent(wg *sync.WaitGroup) {
 	defer wg.Done() // Уменьшаем счетчик в WaitGroup
+	if <-stopch {
+		return
+	}
 	var (
 		result float64
 	)
@@ -57,20 +61,20 @@ func Agent(wg *sync.WaitGroup) {
 	// Выполняем GET-запрос
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println("Ошибка при запросе:", err)
+		fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Ошибка чтения тела ответа:", err)
+		fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 
 	var apiResp APIResponse
 	err = json.Unmarshal(body, &apiResp)
 	if err != nil {
-		fmt.Println("Ошибка при разборе JSON:", err)
+		fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 
@@ -129,7 +133,7 @@ func Agent(wg *sync.WaitGroup) {
 			a, erra := strconv.ParseFloat(task.Arg1, 64)
 			b, errb := strconv.ParseFloat(task.Arg2, 64)
 			if erra != nil || errb != nil {
-				fmt.Println("Ошибка при преобразовании значений.")
+				fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 				fmt.Println(a, erra, b, errb)
 				close(stopch)
 				return
@@ -143,7 +147,7 @@ func Agent(wg *sync.WaitGroup) {
 					result = a * b
 				case "/":
 					if b == 0 {
-						fmt.Println("Ошибка: Деление на нуль")
+						fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 						return
 					} else {
 						result = a / b
@@ -155,13 +159,13 @@ func Agent(wg *sync.WaitGroup) {
 			fmt.Println(res, valmap)
 			body, err := json.Marshal(res)
 			if err != nil {
-				fmt.Println("Ошибка при сериализации:", err)
+				fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 				return
 			}
 
 			resp, err = http.Post(url, "application/json", bytes.NewBuffer(body))
 			if err != nil {
-				fmt.Println("Ошибка при отправке запроса:", err)
+				fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 				return
 			}
 			defer resp.Body.Close()
@@ -172,7 +176,7 @@ func Agent(wg *sync.WaitGroup) {
 }
 
 func main() {
-	if err := godotenv.Load("variables.env"); err != nil {
+	if err := godotenv.Load("./internal/config/variables.env"); err != nil {
 		fmt.Println("Ошибка при загрузке переменных среды")
 	}
 	comp_power, _ = strconv.Atoi(os.Getenv("COMPUTING_POWER"))

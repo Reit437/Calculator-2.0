@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	Calc "github.com/Reit437/Calculator-2.0/pkg/calc"
-	err "github.com/Reit437/Calculator-2.0/pkg/errors"
+	errors "github.com/Reit437/Calculator-2.0/pkg/errors"
 	"github.com/gorilla/mux" // Импортируйте пакет Gorilla Mux для маршрутизации
 	"github.com/joho/godotenv"
 )
@@ -68,13 +68,13 @@ var (
 
 func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, err.ErrInternalServerError, http.StatusInternalServerError)
+		http.Error(w, errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 
 	var req ExpressionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Expression == "" {
-		http.Error(w, err.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
+		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -82,7 +82,11 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	defer mu.Unlock()
 
 	// Вызов функции Calc для разбора выражения
-	subExpr := Calc.Calc(req.Expression)
+	subExpr, expErr := Calc.Calc(req.Expression)
+	if expErr == 422 {
+		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
+		return
+	}
 	id = []SubExp{}
 	maxid = 0
 	for expid, exp := range subExpr {
@@ -90,13 +94,17 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 		resp := SubExp{Id: expid, Status: "not solved", Result: exp}
 		id = append(id, resp) // добавляем новый результат
 	}
+	sort.Slice(id, func(i, j int) bool {
+		return id[i].Id < id[j].Id
+	})
 
 	resp := Response{ID: strconv.Itoa(maxid)}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 
-	if err := godotenv.Load("variables.env"); err != nil {
+	if err := godotenv.Load("./internal/config/variables.env"); err != nil {
 		http.Error(w, "Ошибка при загрузке переменных среды", http.StatusInternalServerError)
+		return
 	}
 	var (
 		addTime  = os.Getenv("TIME_ADDITION_MS")
@@ -145,11 +153,13 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 		Operation:      "no",
 		Operation_time: "",
 	})
-	cmd := exec.Command("go", "run", ".\agent.go")
-	err := cmd.Run()
-	if err != nil {
-		http.Error(w, "Что-то пошло не так", 500)
-	}
+	go func() {
+		cmd := exec.Command("go", "run", "./internal/services/agent.go")
+		err := cmd.Run()
+		if err != nil {
+			fmt.Println(errors.ErrInternalServerError)
+		}
+	}()
 }
 
 func ExpressionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +173,7 @@ func ExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "    ")
 	if err := encoder.Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		http.Error(w, errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 }
@@ -175,7 +185,10 @@ func ExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	expressionID := vars["id"] // Получаем ID из маршрута
-
+	expressId, err := strconv.Atoi(expressionID)
+	if expressId > maxid || expressId < 1 || err != nil {
+		http.Error(w, errors.ErrNotFound, http.StatusNotFound)
+	}
 	// Поиск выражения
 	for _, exp := range id {
 		if exp.Id == expressionID {
@@ -185,7 +198,7 @@ func ExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
 			encoder := json.NewEncoder(w)
 			encoder.SetIndent("", "    ")
 			if err := encoder.Encode(response); err != nil {
-				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+				http.Error(w, errors.ErrInternalServerError, http.StatusInternalServerError)
 				return
 			}
 			return
@@ -219,22 +232,22 @@ func TaskHandler(w http.ResponseWriter, r *http.Request) {
 func ResultHandler(w http.ResponseWriter, r *http.Request) {
 	// Проверяем метод запроса
 	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не разрешён", http.StatusMethodNotAllowed)
+		http.Error(w, errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 	var result ResultResp
 	// Декодируем JSON из тела запроса
 	err := json.NewDecoder(r.Body).Decode(&result)
 	if err != nil {
-		http.Error(w, "Ошибка декодирования JSON", http.StatusBadRequest)
+		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 		return
 	}
 	if result.Id[len(result.Id)-1] == byte(maxid+1) {
-		http.Error(w, "Нет такой задачи", http.StatusNotFound)
+		http.Error(w, errors.ErrNotFound, http.StatusNotFound)
 	}
 	d, err := strconv.ParseFloat(result.Result, 64)
 	if err != nil {
-		http.Error(w, "Невалидные данные", http.StatusPaymentRequired)
+		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 	}
 	for i := 0; i < len(id); i++ {
 		if id[i].Id == result.Id {
@@ -253,8 +266,7 @@ func ResultHandler(w http.ResponseWriter, r *http.Request) {
 /*curl --location 'http://localhost:80/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
-  "expression": "1 + 2 + (1 - 5) / 5 * ( 5 / 8)"
+  "expression": "10 + 2 / 12 * ( 14 - 5 ) / 57 * ( -56 / 8 )"
 }'*/
 //curl --location 'localhost/api/v1/expressions'
 //curl --location 'localhost/api/v1/expressions/:id'
-//curl --location 'localhost/api/v1/cleaner'
