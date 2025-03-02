@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	Calc "github.com/Reit437/Calculator-2.0/pkg/calc"
+	err "github.com/Reit437/Calculator-2.0/pkg/errors"
 	"github.com/gorilla/mux" // Импортируйте пакет Gorilla Mux для маршрутизации
 	"github.com/joho/godotenv"
 )
@@ -67,13 +68,13 @@ var (
 
 func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, err.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 
 	var req ExpressionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Expression == "" {
-		http.Error(w, "Invalid data", http.StatusUnprocessableEntity)
+		http.Error(w, err.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 		return
 	}
 
