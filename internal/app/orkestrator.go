@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	Calc "github.com/Reit437/Calculator-2.0/pkg/calc"
 	"github.com/gorilla/mux" // Импортируйте пакет Gorilla Mux для маршрутизации
 	"github.com/joho/godotenv"
 )
@@ -64,7 +65,7 @@ var (
 	v              int
 )
 
-func calculateHandler(w http.ResponseWriter, r *http.Request) {
+func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -80,7 +81,7 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	defer mu.Unlock()
 
 	// Вызов функции Calc для разбора выражения
-	subExpr := Calc(req.Expression)
+	subExpr := Calc.Calc(req.Expression)
 	id = []SubExp{}
 	maxid = 0
 	for expid, exp := range subExpr {
@@ -150,7 +151,7 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func expressionsHandler(w http.ResponseWriter, r *http.Request) {
+func ExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -167,7 +168,7 @@ func expressionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Новый обработчик для получения конкретного выражения по ID
-func expressionByIDHandler(w http.ResponseWriter, r *http.Request) {
+func ExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -194,7 +195,7 @@ func expressionByIDHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Новый обработчик для /internal/task
-func taskHandler(w http.ResponseWriter, r *http.Request) {
+func TaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	var mu sync.Mutex
 	mu.Lock()
@@ -214,7 +215,7 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	return
 }
-func resultHandler(w http.ResponseWriter, r *http.Request) {
+func ResultHandler(w http.ResponseWriter, r *http.Request) {
 	// Проверяем метод запроса
 	if r.Method != http.MethodPost {
 		http.Error(w, "Метод не разрешён", http.StatusMethodNotAllowed)
