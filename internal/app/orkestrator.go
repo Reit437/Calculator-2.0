@@ -3,9 +3,11 @@ package orkestrator
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,26 +15,26 @@ import (
 
 	Calc "github.com/Reit437/Calculator-2.0/pkg/calc"
 	errors "github.com/Reit437/Calculator-2.0/pkg/errors"
-	"github.com/gorilla/mux" // Импортируйте пакет Gorilla Mux для маршрутизации
+	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 )
 
 type ExpressionRequest struct {
-	Expression string `json:"expression"` // фиксируем это место
+	Expression string `json:"expression"` // Прием первого запроса от пользователя с выражением
 }
 
-type SubExp struct {
-	Id     string `json:"id"`     // идентификатор
-	Status string `json:"status"` // статус
-	Result string `json:"result"` // результат
+type SubExp struct { //подвыражения, запрашиваемые пользователем
+	Id     string `json:"Id"`
+	Status string `json:"status"`
+	Result string `json:"result"`
 }
 
 type Response struct {
-	ID string `json:"id"` // идентификатор
+	ID string `json:"Id"` //главный id, по которому пользователь получает конечный ответ на все выражение(ответ для CalculateHandler)
 }
 
-type Task struct {
-	Id             string `json:"id"`
+type Task struct { //задания, отправляемые агенту
+	Id             string `json:"Id"`
 	Arg1           string `json:"Arg1"`
 	Arg2           string `json:"Arg2"`
 	Operation      string `json:"Operation"`
@@ -40,39 +42,43 @@ type Task struct {
 }
 
 type AllExpressionsResponse struct {
-	Expressions []SubExp `json:"expressions"` // массив выражений
+	Expressions []SubExp `json:"expressions"` // ответ для ExpressionsHandler
 }
 
 type ExpressionResponse struct {
-	Expression SubExp `json:"expression"` // конкретное выражение
+	Expression SubExp `json:"expression"` // ответ для ExpressionByIdHandler
 }
 
 type TaskResponse struct {
-	Tasks Task `json:"tasks"` // Сообщение
+	Tasks Task `json:"Tasks"` //ответ для TaskHandler
 }
 
-type ResultResp struct {
+type ResultResp struct { //прием результатов от агента
 	Id     string `json:"Id"`
 	Result string `json:"result"`
 }
 
 var (
-	subExpressions = make(map[string]string) // новая карта для результатов вычислений
+	subExpressions = make(map[string]string)
 	mu             sync.Mutex
-	id             []SubExp
-	maxid          int
-	tasks          []Task
+	Id             []SubExp
+	Maxid          int
+	Tasks          []Task
 	res            float64
 	v              int
 )
 
 func CalculateHandler(w http.ResponseWriter, r *http.Request) {
+	/*Прием запроса с выражением от пользователя
+	Разбиение его на подвыражения,
+	Формирование заданий для агента,
+	Запуск агента*/
 	if r.Method != http.MethodPost {
 		http.Error(w, errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
 
-	var req ExpressionRequest
+	var req ExpressionRequest //прием запроса
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Expression == "" {
 		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 		return
@@ -81,44 +87,67 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Вызов функции Calc для разбора выражения
+	// вызов функции Calc для разбора выражения
 	subExpr, expErr := Calc.Calc(req.Expression)
+	//проверка на ошибки при разбиении
 	if expErr == 422 {
 		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 		return
 	}
-	id = []SubExp{}
-	maxid = 0
+
+	Id = []SubExp{}
+	Maxid = 0
+
+	//проходимся по мапе из Calc и добавляем в соответствующем формате в Id
 	for expid, exp := range subExpr {
-		maxid++
+		Maxid++
 		resp := SubExp{Id: expid, Status: "not solved", Result: exp}
-		id = append(id, resp) // добавляем новый результат
+		Id = append(Id, resp)
 	}
-	sort.Slice(id, func(i, j int) bool {
-		return id[i].Id < id[j].Id
+
+	//сортировка Id по id
+	sort.Slice(Id, func(i, j int) bool {
+		id1, _ := strconv.Atoi(Id[i].Id[2:])
+		id2, _ := strconv.Atoi(Id[j].Id[2:])
+		return id1 < id2
 	})
 
-	resp := Response{ID: strconv.Itoa(maxid)}
+	//формирование ответа
+	resp := Response{ID: strconv.Itoa(Maxid)}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 
-	if err := godotenv.Load("./internal/config/variables.env"); err != nil {
-		http.Error(w, "Ошибка при загрузке переменных среды", http.StatusInternalServerError)
-		return
+	//Формирование заданий
+	dir, err := os.Getwd() //установка пути до файла с переменными среды
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	dir = dir[:strings.Index(dir, "Calculator-2.0")+14]
+	envPath := filepath.Join(dir, "internal", "config", "variables.env")
+	//Загрузка переменных среды
+	if err := godotenv.Load(envPath); err != nil {
+		log.Fatalf("Ошибка загрузки .env в оркестраторе из %s: %v", envPath, err)
+	}
+
 	var (
 		addTime  = os.Getenv("TIME_ADDITION_MS")
 		subTime  = os.Getenv("TIME_SUBTRACTION_MS")
 		multTime = os.Getenv("TIME_MULTIPLICATIONS_MS")
 		divTime  = os.Getenv("TIME_DIVISIONS_MS")
 	)
-	for _, i := range id {
+
+	//Формирование массива с заданиями
+	for _, i := range Id {
 		result := i.Result
+		//Ищем знаки операций
 		add := strings.Index(result, "+")
 		sub := strings.Index(result, " - ")
 		mult := strings.Index(result, "*")
 		div := strings.Index(result, "/")
 		var time, ind = "", 0
+
+		//Если находим операцию, устанавливаем соответствующее время и запоминаем индекс операции
 		switch {
 		case add != -1:
 			time = addTime
@@ -133,6 +162,8 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 			time = divTime
 			ind = div
 		}
+
+		//Формируем задание
 		task := Task{
 			Id:             i.Id,
 			Arg1:           result[:ind-1],
@@ -140,36 +171,43 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 			Operation:      string(result[ind]),
 			Operation_time: time,
 		}
+		Tasks = append(Tasks, task) //добавляем задание
 
-		tasks = append(tasks, task)
-		sort.Slice(tasks, func(i, j int) bool {
-			return tasks[i].Id < tasks[j].Id
+		//сортировка заданий по id
+		sort.Slice(Tasks, func(i, j int) bool {
+			id1, _ := strconv.Atoi(Tasks[i].Id[2:])
+			id2, _ := strconv.Atoi(Tasks[j].Id[2:])
+			return id1 < id2
 		})
 	}
-	tasks = append(tasks, Task{
+
+	//Создаем последнее задание для остановки агента
+	Tasks = append(Tasks, Task{
 		Id:             "last",
-		Arg1:           "0",
-		Arg2:           "0",
+		Arg1:           "g",
+		Arg2:           "g",
 		Operation:      "no",
 		Operation_time: "",
 	})
+	//Запускаем агента
 	go func() {
 		cmd := exec.Command("go", "run", "./internal/services/agent.go")
 		err := cmd.Run()
 		if err != nil {
-			fmt.Println(errors.ErrInternalServerError)
+			fmt.Println(errors.ErrInternalServerError, err)
 		}
 	}()
 }
 
 func ExpressionsHandler(w http.ResponseWriter, r *http.Request) {
+	//Отправка массива Id с подвыражениями
 	mu.Lock()
 	defer mu.Unlock()
 
-	response := AllExpressionsResponse{Expressions: id}
+	//формирование ответа
+	response := AllExpressionsResponse{Expressions: Id}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "    ")
 	if err := encoder.Encode(response); err != nil {
@@ -178,20 +216,24 @@ func ExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Новый обработчик для получения конкретного выражения по ID
 func ExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
+	//Вывод подвыражения по его id
 	mu.Lock()
 	defer mu.Unlock()
 
+	//определяем запрашиваемый id
 	vars := mux.Vars(r)
-	expressionID := vars["id"] // Получаем ID из маршрута
+	expressionID := vars["id"]
 	expressId, err := strconv.Atoi(expressionID)
-	if expressId > maxid || expressId < 1 || err != nil {
+	//проверяем валидность id
+	if expressId > Maxid || expressId < 1 || err != nil {
 		http.Error(w, errors.ErrNotFound, http.StatusNotFound)
 	}
-	// Поиск выражения
-	for _, exp := range id {
+
+	// поиск выражения
+	for _, exp := range Id {
 		if exp.Id == expressionID {
+			//формирование ответа
 			response := ExpressionResponse{Expression: exp}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -210,18 +252,19 @@ func ExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 // Новый обработчик для /internal/task
 func TaskHandler(w http.ResponseWriter, r *http.Request) {
-
+	// отправка подвыражений агенту
 	var mu sync.Mutex
 	mu.Lock()
 	defer mu.Unlock()
-	response := TaskResponse{Tasks: tasks[0]}
-	tasks = tasks[1:]
 
-	// Устанавливаем заголовки
+	//взятие первого элемента и его удаление
+	response := TaskResponse{Tasks: Tasks[0]}
+	Tasks = Tasks[1:]
+
+	//формирование ответа
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	// Кодируем ответ в JSON и отправляем
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "    ")
 	if err := encoder.Encode(response); err != nil {
@@ -230,35 +273,41 @@ func TaskHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 func ResultHandler(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод запроса
+	// прием результатов от агента
 	if r.Method != http.MethodPost {
 		http.Error(w, errors.ErrInternalServerError, http.StatusInternalServerError)
 		return
 	}
+
+	//декодирование ответа
 	var result ResultResp
-	// Декодируем JSON из тела запроса
 	err := json.NewDecoder(r.Body).Decode(&result)
 	if err != nil {
 		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 		return
 	}
-	if result.Id[len(result.Id)-1] == byte(maxid+1) {
+
+	//проверка на валидность подвыражений
+	if result.Id[len(result.Id)-1] == byte(Maxid+1) {
 		http.Error(w, errors.ErrNotFound, http.StatusNotFound)
 	}
+
+	//замена статуса и результата в Id
 	d, err := strconv.ParseFloat(result.Result, 64)
 	if err != nil {
 		http.Error(w, errors.ErrUnprocessableEntity, http.StatusUnprocessableEntity)
 	}
-	for i := 0; i < len(id); i++ {
-		if id[i].Id == result.Id {
-			id[i].Status = "solved"
-			id[i].Result = result.Result
+	for i := 0; i < len(Id); i++ {
+		if Id[i].Id == result.Id {
+			Id[i].Status = "solved"
+			Id[i].Result = result.Result
 			break
 		}
 	}
+	//Подсчет результата
 	res = res + d
 	v++
-	if v == maxid {
+	if v == Maxid {
 		fmt.Println("Выражение решено")
 	}
 }
@@ -266,7 +315,7 @@ func ResultHandler(w http.ResponseWriter, r *http.Request) {
 /*curl --location 'http://localhost:80/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
-  "expression": "10 + 2 / 12 * ( 14 - 5 ) / 57 * ( -56 / 8 )"
+  "expression": "1.2 + ( -8 * 9 / 7 + 56 - 7 ) * 8 - 35 + 74 / 41 - 8"
 }'*/
 //curl --location 'localhost/api/v1/expressions'
-//curl --location 'localhost/api/v1/expressions/:id'
+//curl --location 'localhost/api/v1/expressions/:Id'

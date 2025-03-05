@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +19,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Структура для задачи
+// Задание от оркестратора
 type Task struct {
 	Id             string `json:"id"`
 	Arg1           string `json:"Arg1"`
@@ -25,12 +27,14 @@ type Task struct {
 	Operation      string `json:"Operation"`
 	Operation_time string `json:"Operation_time"`
 }
+
+// Ответ оркестратору
 type SolvExp struct {
 	Id     string `json:"id"`
 	Result string `json:"result"`
 }
 
-// Структура для всего ответа, который содержит объект "tasks"
+// Ответ оркестратору
 type APIResponse struct {
 	Tasks Task `json:"tasks"`
 }
@@ -40,150 +44,174 @@ var (
 	result     float64
 	ID         string
 	valmap     = make(map[string]string)
-	stopch     = make(chan bool)
+	stopch     = make(chan struct{})
 	dig        int
 	comp_power int
 	n          int
 )
 
-// Функция Agent будет выполняться в отдельной горутине
 func Agent(wg *sync.WaitGroup) {
-	defer wg.Done() // Уменьшаем счетчик в WaitGroup
-	if <-stopch {
-		return
-	}
-	var (
-		result float64
-	)
-	// URL вашего внутреннего API
-	url := "http://localhost/internal/task"
-
-	// Выполняем GET-запрос
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
-		return
-	}
-
-	var apiResp APIResponse
-	err = json.Unmarshal(body, &apiResp)
-	if err != nil {
-		fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Printf("%+v\n", apiResp.Tasks)
-	task := apiResp.Tasks
-	dig++
-	fmt.Println(dig, "dig", comp_power)
-	if dig == comp_power && task.Id != "last" {
-		n++
-	}
-	if task.Id == "last" {
-		close(stopch)
-	}
-	mu.Lock()
-	ID = task.Id
-	valmap[ID] = "no"
-	mu.Unlock()
-	fmt.Println(valmap)
-	fmt.Println(task.Arg1, valmap[task.Arg1], task.Arg2, valmap[task.Arg2])
-	for strings.Contains(task.Arg1, "id") || strings.Contains(task.Arg2, "id") {
-		fmt.Println(strings.Index(task.Arg1, "id"), task.Arg1)
-		if strings.Contains(task.Arg1, "id") {
-			if valmap[task.Arg1] != "no" {
-				task.Arg1 = strings.Replace(task.Arg1, task.Arg1, valmap[task.Arg1], 1)
-			} else {
-				time.Sleep(time.Millisecond * 100)
-			}
-		}
-		fmt.Println(strings.Contains(task.Arg2, "id"), valmap[task.Arg2], ">", task.Arg2, "<")
-		if strings.Contains(task.Arg2, "id") {
-			task.Arg2 = task.Arg2[:len(task.Arg2)-1]
-			fmt.Println(">", task.Arg2, "<")
-			if valmap[task.Arg2] != "no" {
-				task.Arg2 = strings.Replace(task.Arg2, task.Arg2, valmap[task.Arg2], 1)
-			} else {
-				time.Sleep(time.Millisecond * 100)
-			}
-		}
-	}
-
-	t, _ := strconv.Atoi(task.Operation_time)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(t))
-	defer cancel()
-
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("Таймаут вышел")
+	defer wg.Done()
+	// Проверка до попытки забрать задание, закрыт ли останавливающий канал
+	select {
+	case _, ok := <-stopch:
+		if !ok {
 			return
-		case <-stopch:
+		}
+	default:
+
+		var (
+			result float64
+		)
+
+		url := "http://localhost/internal/task"
+		// Запрашиваем задание
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
 			return
-		default:
-			fmt.Println(task.Operation, task.Id)
-			task.Arg2 = task.Arg2[:len(task.Arg2)-1]
-			fmt.Println(">", task.Arg1, "<", ">", task.Arg2, "<")
-			a, erra := strconv.ParseFloat(task.Arg1, 64)
-			b, errb := strconv.ParseFloat(task.Arg2, 64)
-			if erra != nil || errb != nil {
-				fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
-				fmt.Println(a, erra, b, errb)
-				close(stopch)
-				return
-			} else {
-				switch task.Operation {
-				case "+":
-					result = a + b
-				case "-":
-					result = a - b
-				case "*":
-					result = a * b
-				case "/":
-					if b == 0 {
-						fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
-						return
-					} else {
-						result = a / b
-					}
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
+			return
+		}
+
+		// Декодируем ответ
+		var apiResp APIResponse
+		err = json.Unmarshal(body, &apiResp)
+		if err != nil {
+			fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
+			return
+		}
+
+		task := apiResp.Tasks
+		dig++
+		// Проверяем, хватает ли горутин, чтобы выполнить все задачи
+		if dig == comp_power && task.Id != "last" {
+			// Добавляем круг цикла т.к. горутин не хватает
+			n++
+			dig = 0
+		}
+		// Проверяем, что задача не последняя
+		if task.Id == "last" {
+			close(stopch)
+			return
+		}
+
+		mu.Lock()
+		ID = task.Id
+		// Устанавливаем для id ответа в мапе "no"
+		valmap[ID] = "no"
+		mu.Unlock()
+
+		// Цикл пока все Аргументы с id не станут простыми числами
+		for strings.Contains(task.Arg1, "id") || strings.Contains(task.Arg2, "id") {
+			if strings.Contains(task.Arg1, "id") {
+				// Если задача с таким id решилась меняем в аргументе 1 значение на ответ в той задаче
+				if valmap[task.Arg1] != "no" {
+					task.Arg1 = strings.Replace(task.Arg1, task.Arg1, valmap[task.Arg1], 1)
+					// Ждем, чтобы задача решилась
+				} else {
+					time.Sleep(time.Millisecond * 100)
 				}
 			}
-			valmap[ID] = strconv.FormatFloat(result, 'f', 3, 64)
-			res := SolvExp{Id: task.Id, Result: strconv.FormatFloat(result, 'f', 3, 64)}
-			fmt.Println(res, valmap)
-			body, err := json.Marshal(res)
-			if err != nil {
-				fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
-				return
+			if strings.Contains(task.Arg2, "id") {
+				// Убираем лишний пробел у 2 аргумента
+				task.Arg2 = task.Arg2[:len(task.Arg2)-1]
+				// Если задача с таким id решилась меняем в аргументе 2 значение на ответ в той задаче
+				if valmap[task.Arg2] != "no" {
+					task.Arg2 = strings.Replace(task.Arg2, task.Arg2, valmap[task.Arg2], 1)
+					// Ждем, чтобы задача решилась
+				} else {
+					time.Sleep(time.Millisecond * 100)
+				}
 			}
+		}
 
-			resp, err = http.Post(url, "application/json", bytes.NewBuffer(body))
-			if err != nil {
-				fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
+		// Устанавливаем таймаут
+		t, _ := strconv.Atoi(task.Operation_time)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(t))
+		defer cancel()
+
+		// Проверяем закрыт ли останавливающий канал, кончился ли таймаут, если нет, то решаем задачу
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("Таймаут вышел")
+				return
+			case <-stopch:
+				return
+			default:
+				// Конвертируем аргументы в числа
+				task.Arg2 = task.Arg2[:len(task.Arg2)-1]
+				a, erra := strconv.ParseFloat(task.Arg1, 64)
+				b, errb := strconv.ParseFloat(task.Arg2, 64)
+				// Проверяем успешна ли конвертация
+				if erra != nil || errb != nil {
+					fmt.Println("Невалидные значения аргументов", http.StatusInternalServerError)
+					close(stopch)
+					return
+				} else {
+					// Ищем подходящую операцию
+					switch task.Operation {
+					case "+":
+						result = a + b
+					case "-":
+						result = a - b
+					case "*":
+						result = a * b
+					case "/":
+						// Проверяем на деление на ноль
+						if b == 0 {
+							fmt.Println("Деление на ноль", http.StatusInternalServerError)
+							return
+						} else {
+							result = a / b
+						}
+					}
+				}
+				// Заменяем значение по id в мапе на результат задачи
+				valmap[ID] = strconv.FormatFloat(result, 'f', 3, 64)
+				// Формируем ответ
+				res := SolvExp{Id: task.Id, Result: strconv.FormatFloat(result, 'f', 3, 64)}
+				body, err := json.Marshal(res)
+				if err != nil {
+					fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
+					return
+				}
+
+				resp, err = http.Post(url, "application/json", bytes.NewBuffer(body))
+				if err != nil {
+					fmt.Println(errors.ErrInternalServerError, http.StatusInternalServerError)
+					return
+				}
+				defer resp.Body.Close()
 				return
 			}
-			defer resp.Body.Close()
-			return
 		}
 	}
-	return
 }
-
 func main() {
-	if err := godotenv.Load("./internal/config/variables.env"); err != nil {
-		fmt.Println("Ошибка при загрузке переменных среды")
+	// Формирование пути до файла с переменнами среды
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
 	}
+	dir = dir[:strings.Index(dir, "Calculator-2.0")+14]
+	envPath := filepath.Join(dir, "internal", "config", "variables.env")
+	// Загружаем переменные среды
+	if err := godotenv.Load(envPath); err != nil {
+		log.Fatalf("Ошибка загрузки .env в агенте из %s: %v", envPath, err)
+	}
+
 	comp_power, _ = strconv.Atoi(os.Getenv("COMPUTING_POWER"))
-	fmt.Println(comp_power)
 	n = 1
 	var wg sync.WaitGroup
-	fmt.Println("Запускаем Agent в горутине...") // Логируем запуск
+
+	// Запуск цикла с горутинами в виде Agent()
+	fmt.Println("Запускаем Agent в горутине...")
 	for i := 0; i < n; i++ {
 		for u := 0; u < comp_power; u++ {
 			wg.Add(1)
@@ -192,6 +220,7 @@ func main() {
 		}
 	}
 	wg.Wait()
+	// Обнуление мапы
 	valmap = make(map[string]string)
 	fmt.Println("Все горутины завершили работу.")
 }
