@@ -68,7 +68,7 @@ curl --location 'http://localhost:80/api/v1/calculate' \
 #### Правильная работа программы
 1. Обычное выражение:
    ```
-   curl --location 'http://localhost:80/api/v1/calculate' \
+    curl --location 'http://localhost:80/api/v1/calculate' \
     --header 'Content-Type: application/json' \
     --data '{
     "expression": "2 + 2 * 2"
@@ -76,12 +76,58 @@ curl --location 'http://localhost:80/api/v1/calculate' \
    ```
    Ответ по `curl --location 'localhost/api/v1/expressions/id2'`:
    ```{
+   {
     "expression": {
         "Id": "id2",
         "status": "solved",
         "result": "6.000"
-    }
+        }
    }
    ```
+2. Выражение со скобками:
+   ```
+    curl --location 'http://localhost:80/api/v1/calculate' \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "expression": "2 + 2 * 2 / ( 8 * 5 )"
+    }'
+   ```
+   Ответ по `curl --location 'localhost/api/v1/expressions/id4'`:
+   ```
+    {
+    "expression": {
+        "Id": "id4",
+        "status": "solved",
+        "result": "2.100"
+        }
+    }
+   ```
+3. Сложное выражение со скобками отрицательными числами и дробными числами:
+    ```
+    curl --location 'http://localhost:80/api/v1/calculate' \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "expression": "1.2 + ( -8 * 9 / 7 + 56 - 7 ) * 8 - 35 + 74 / 41 - 8"
+    }'
+   ```
+    Ответ по `curl --location 'localhost/api/v1/expressions/id10'`:
+   ```
+   {
+    "expression": {
+        "Id": "id10",
+        "status": "solved",
+        "result": "269.710"
+        }
+    }
 
-
+   ```
+4. Ошибочное выражение:
+    ```
+    curl --location 'http://localhost:80/api/v1/calculate' \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "expression": "2 + 2 * * 2 / ( 8 * 5 )"
+    }'
+    ```
+    Ответ:
+   `Невалидные данные`
