@@ -55,11 +55,33 @@ curl --location 'http://localhost:80/api/v1/calculate' \
 
 4. Пока будет решаться выражение вы можете ввести(в GitBash):
 
-1.`curl --location 'localhost/api/v1/expressions`, чтобы посмотреть все сформированные подзадачи
+1.`curl --location 'localhost/api/v1/expressions'`, чтобы посмотреть все сформированные подзадачи
 
-2.`curl --location 'localhost/api/v1/expressions/id1`, чтобы посмотреть определенную подзадачу(можете менять id1 на любой id, но строго в таком формате)
+2.`curl --location 'localhost/api/v1/expressions/id1'`, чтобы посмотреть определенную подзадачу(можете менять id1 на любой id, но строго в таком формате)
 
 6. После надписи в терминале "Выражение решено", можете ввести команду 4.2 с id, который вам дали при вводе выражения и увидеть ответ
+7. Для запуска тестов:
+
+   1. Для тестов Calc введите: `go test -v ./pkg/calc`
+   2. Для тестов CalculateHandler и ExpressionsHandler введите: `go test -v ./internal/app`
 ## Примеры работы
+#### Правильная работа программы
+1. Обычное выражение:
+   ```
+   curl --location 'http://localhost:80/api/v1/calculate' \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "expression": "2 + 2 * 2"
+    }'
+   ```
+   Ответ по `curl --location 'localhost/api/v1/expressions/id2'`:
+   ```{
+    "expression": {
+        "Id": "id2",
+        "status": "solved",
+        "result": "6.000"
+    }
+   }
+   ```
 
 
