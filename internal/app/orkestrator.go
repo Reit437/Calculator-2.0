@@ -224,7 +224,7 @@ func ExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
 	//определяем запрашиваемый id
 	vars := mux.Vars(r)
 	expressionID := vars["id"]
-	expressId, err := strconv.Atoi(expressionID)
+	expressId, err := strconv.Atoi(expressionID[2:])
 	//проверяем валидность id
 	if expressId > Maxid || expressId < 1 || err != nil {
 		http.Error(w, errors.ErrNotFound, http.StatusNotFound)
