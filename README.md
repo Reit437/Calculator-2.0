@@ -64,6 +64,7 @@ curl --location 'http://localhost:80/api/v1/calculate' \
 
    1. Для тестов Calc введите: `go test -v ./pkg/calc`
    2. Для тестов CalculateHandler и ExpressionsHandler введите: `go test -v ./internal/app`
+8. Для изменения переменных среды откройте файл в `/internal/config/variables.env` и измените их
 ## Примеры работы
 #### Правильная работа программы
 1. Обычное выражение:
