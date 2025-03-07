@@ -312,7 +312,7 @@ func ResultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*curl --location 'http://localhost:80/api/v1/calculate' \
+/*curl --location 'http://localhost:5000/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
   "expression": "1.2 + ( -8 * 9 / 7 + 56 - 7 ) * 8 - 35 + 74 / 41 - 8"
