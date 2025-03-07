@@ -44,7 +44,7 @@
 2. Введите в терминал `go run ./cmd/app/main.go`
 3. Откройте GitBash и введите(поле expression можно менять как угодно):
 ```
-curl --location 'http://localhost:80/api/v1/calculate' \
+curl --location 'http://localhost:5000/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
   "expression": "1.2 + ( -8 * 9 / 7 + 56 - 7 ) * 8 - 35 + 74 / 41 - 8"
@@ -69,7 +69,7 @@ curl --location 'http://localhost:80/api/v1/calculate' \
 #### Правильная работа программы
 1. Обычное выражение:
    ```
-    curl --location 'http://localhost:80/api/v1/calculate' \
+    curl --location 'http://localhost:5000/api/v1/calculate' \
     --header 'Content-Type: application/json' \
     --data '{
     "expression": "2 + 2 * 2"
@@ -87,7 +87,7 @@ curl --location 'http://localhost:80/api/v1/calculate' \
    ```
 2. Выражение со скобками:
    ```
-    curl --location 'http://localhost:80/api/v1/calculate' \
+    curl --location 'http://localhost:5000/api/v1/calculate' \
     --header 'Content-Type: application/json' \
     --data '{
     "expression": "2 + 2 * 2 / ( 8 * 5 )"
@@ -105,7 +105,7 @@ curl --location 'http://localhost:80/api/v1/calculate' \
    ```
 3. Сложное выражение со скобками отрицательными числами и дробными числами:
     ```
-    curl --location 'http://localhost:80/api/v1/calculate' \
+    curl --location 'http://localhost:5000/api/v1/calculate' \
     --header 'Content-Type: application/json' \
     --data '{
     "expression": "1.2 + ( -8 * 9 / 7 + 56 - 7 ) * 8 - 35 + 74 / 41 - 8"
@@ -124,7 +124,7 @@ curl --location 'http://localhost:80/api/v1/calculate' \
    ```
 4. Ошибочное выражение:
     ```
-    curl --location 'http://localhost:80/api/v1/calculate' \
+    curl --location 'http://localhost:5000/api/v1/calculate' \
     --header 'Content-Type: application/json' \
     --data '{
     "expression": "2 + 2 * * 2 / ( 8 * 5 )"
