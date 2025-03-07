@@ -20,8 +20,8 @@ func main() {
 	router.HandleFunc("/internal/task", ork.ResultHandler).Methods("POST")
 
 	// Запускаем сервер
-	fmt.Println("Сервер запущен на порту 80...")
-	if err := http.ListenAndServe(":80", router); err != nil {
+	fmt.Println("Сервер запущен на порту 5000...")
+	if err := http.ListenAndServe(":5000", router); err != nil {
 		log.Fatal(err)
 	}
 }
