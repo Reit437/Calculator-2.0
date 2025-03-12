@@ -64,7 +64,7 @@ func Agent(wg *sync.WaitGroup) {
 			result float64
 		)
 
-		url := "http://localhost/internal/task"
+		url := "http://localhost:5000/internal/task"
 		// Запрашиваем задание
 		resp, err := http.Get(url)
 		if err != nil {
