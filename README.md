@@ -55,9 +55,9 @@ curl --location 'http://localhost:5000/api/v1/calculate' \
 
 4. Пока будет решаться выражение вы можете ввести(в GitBash):
 
-1.`curl --location 'localhost/api/v1/expressions'`, чтобы посмотреть все сформированные подзадачи
+1.`curl --location 'localhost:5000/api/v1/expressions'`, чтобы посмотреть все сформированные подзадачи
 
-2.`curl --location 'localhost/api/v1/expressions/id1'`, чтобы посмотреть определенную подзадачу(можете менять id1 на любой id, но строго в таком формате)
+2.`curl --location 'localhost:5000/api/v1/expressions/id1'`, чтобы посмотреть определенную подзадачу(можете менять id1 на любой id, но строго в таком формате)
 
 6. После надписи в терминале "Выражение решено", можете ввести команду 4.2 с id, который вам дали при вводе выражения и увидеть ответ
 7. Для запуска тестов:
@@ -75,7 +75,7 @@ curl --location 'http://localhost:5000/api/v1/calculate' \
     "expression": "2 + 2 * 2"
     }'
    ```
-   Ответ по `curl --location 'localhost/api/v1/expressions/id2'`:
+   Ответ по `curl --location 'localhost:5000/api/v1/expressions/id2'`:
    ```{
    {
     "expression": {
@@ -93,7 +93,7 @@ curl --location 'http://localhost:5000/api/v1/calculate' \
     "expression": "2 + 2 * 2 / ( 8 * 5 )"
     }'
    ```
-   Ответ по `curl --location 'localhost/api/v1/expressions/id4'`:
+   Ответ по `curl --location 'localhost:5000/api/v1/expressions/id4'`:
    ```
     {
     "expression": {
@@ -111,7 +111,7 @@ curl --location 'http://localhost:5000/api/v1/calculate' \
     "expression": "1.2 + ( -8 * 9 / 7 + 56 - 7 ) * 8 - 35 + 74 / 41 - 8"
     }'
    ```
-    Ответ по `curl --location 'localhost/api/v1/expressions/id10'`:
+    Ответ по `curl --location 'localhost:5000/api/v1/expressions/id10'`:
    ```
    {
     "expression": {
